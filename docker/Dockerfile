@@ -7,15 +7,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
+# Copy project files for dependency installation
 COPY pyproject.toml .
-RUN pip install --no-cache-dir .
+COPY src/ src/
 
-# Copy application code
-COPY . .
-
-# Install the package in development mode
+# Install the package
 RUN pip install --no-cache-dir -e .
+
+# Copy remaining files (config, etc.)
+COPY . .
 
 EXPOSE 8000
 

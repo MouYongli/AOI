@@ -35,7 +35,7 @@ aio chat
 ## Project Structure
 
 ```
-aio/                    # Python main package
+src/aio/                # Python main package (src layout)
 ├── core/               # Agent core (orchestrator, agent_instance, skill, context, autonomy, message_bus)
 ├── channels/           # Channel adapters (telegram, cli, progress_reporter)
 ├── workflow/           # Workflow execution (sequential V1, DAG V2)
