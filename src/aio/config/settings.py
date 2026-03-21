@@ -96,11 +96,29 @@ class AIOConfig(BaseModel):
     max_concurrent_sessions: int = 3
 
 
-def load_config(path: str | Path = "config/config.yaml") -> AIOConfig:
-    """Load configuration from YAML file."""
+def load_config(path: str | Path | None = None) -> AIOConfig:
+    """Load configuration from YAML file.
+
+    Resolution order for config path:
+    1. Explicit ``path`` argument
+    2. ``AIO_CONFIG_PATH`` environment variable
+    3. Default ``config/config.yaml``
+    """
+    import os
+
+    if path is None:
+        path = os.environ.get("AIO_CONFIG_PATH", "config/config.yaml")
     config_path = Path(path)
     if config_path.exists():
         with open(config_path) as f:
-            data = yaml.safe_load(f) or {}
+            raw = f.read()
+        # Substitute ${ENV_VAR} placeholders with environment variable values
+        import re
+
+        def _env_sub(m: re.Match[str]) -> str:
+            return os.environ.get(m.group(1), m.group(0))
+
+        raw = re.sub(r"\$\{([^}]+)}", _env_sub, raw)
+        data = yaml.safe_load(raw) or {}
         return AIOConfig.model_validate(data)
     return AIOConfig()

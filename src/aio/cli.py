@@ -1,4 +1,4 @@
-"""CLI entry point: aio chat / aio ask / pipe input."""
+"""CLI entry point: aio chat / aio ask / aio serve."""
 
 from __future__ import annotations
 
@@ -7,6 +7,24 @@ from rich.console import Console
 
 app = typer.Typer(name="aio", help="AIO — AI On-premise CLI")
 console = Console()
+
+
+@app.command()
+def serve(
+    config: str = typer.Option("config/config.yaml", "--config", "-c", help="Config file path"),
+    host: str = typer.Option("0.0.0.0", "--host", help="Bind host"),
+    port: int = typer.Option(8000, "--port", "-p", help="Bind port"),
+) -> None:
+    """Start the AIO gateway (FastAPI + Telegram bot)."""
+    import uvicorn
+
+    # Set config path via env so app.py can pick it up
+    import os
+    os.environ.setdefault("AIO_CONFIG_PATH", config)
+
+    console.print(f"[bold]AIO Gateway[/bold] starting on {host}:{port}")
+    console.print(f"Config: {config}")
+    uvicorn.run("aio.app:app", host=host, port=port, log_level="info")
 
 
 @app.command()
@@ -23,7 +41,7 @@ def chat(
             if user_input.strip().lower() in ("exit", "quit"):
                 break
             # TODO: wire to MessageBus
-            console.print(f"[bold blue]AIO:[/bold blue] [placeholder response]")
+            console.print("[bold blue]AIO:[/bold blue] [placeholder response]")
         except (KeyboardInterrupt, EOFError):
             break
 
