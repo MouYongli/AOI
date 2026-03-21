@@ -46,9 +46,14 @@ class MessageBus:
     async def dispatch(self, message: Message) -> Message:
         """Dispatch an incoming user message to the orchestrator and return the response."""
         logger.info("message_bus.dispatch", session_id=message.session_id, role=message.role)
-        # Placeholder: will be wired to AgentOrchestrator
+        # TODO: wire to AgentOrchestrator
         return Message(
             role=MessageRole.ASSISTANT,
-            content="[MessageBus] Not yet connected to orchestrator.",
+            content=(
+                f"Hello from AIO Gateway!\n\n"
+                f"You said: {message.content}\n\n"
+                f"Session: {message.session_id[:8]}...\n"
+                f"Channel: {message.channel_type}"
+            ),
             session_id=message.session_id,
         )

@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import os
+import re
 from enum import Enum
 from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class AutonomyLevel(str, Enum):
@@ -41,6 +43,16 @@ class TelegramConfig(BaseModel):
     enabled: bool = False
     bot_token: str = ""
     allowed_user_ids: list[int] = Field(default_factory=list)
+
+    @field_validator("allowed_user_ids", mode="before")
+    @classmethod
+    def parse_comma_separated_ids(cls, v: Any) -> list[int]:
+        if isinstance(v, str):
+            v = v.strip()
+            if not v:
+                return []
+            return [int(x.strip()) for x in v.split(",") if x.strip()]
+        return v
 
 
 class CLIConfig(BaseModel):
@@ -96,6 +108,22 @@ class AIOConfig(BaseModel):
     max_concurrent_sessions: int = 3
 
 
+_ENV_VAR_PATTERN = re.compile(r"\$\{([^}]+)\}")
+
+
+def _expand_env_vars(obj: Any) -> Any:
+    """Recursively expand ${VAR} references in strings using os.environ."""
+    if isinstance(obj, str):
+        def _replace(m: re.Match) -> str:
+            return os.environ.get(m.group(1), "")
+        return _ENV_VAR_PATTERN.sub(_replace, obj)
+    if isinstance(obj, dict):
+        return {k: _expand_env_vars(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_expand_env_vars(item) for item in obj]
+    return obj
+
+
 def load_config(path: str | Path | None = None) -> AIOConfig:
     """Load configuration from YAML file.
 
@@ -104,21 +132,12 @@ def load_config(path: str | Path | None = None) -> AIOConfig:
     2. ``AIO_CONFIG_PATH`` environment variable
     3. Default ``config/config.yaml``
     """
-    import os
-
     if path is None:
         path = os.environ.get("AIO_CONFIG_PATH", "config/config.yaml")
     config_path = Path(path)
     if config_path.exists():
         with open(config_path) as f:
-            raw = f.read()
-        # Substitute ${ENV_VAR} placeholders with environment variable values
-        import re
-
-        def _env_sub(m: re.Match[str]) -> str:
-            return os.environ.get(m.group(1), m.group(0))
-
-        raw = re.sub(r"\$\{([^}]+)}", _env_sub, raw)
-        data = yaml.safe_load(raw) or {}
+            data = yaml.safe_load(f) or {}
+        data = _expand_env_vars(data)
         return AIOConfig.model_validate(data)
     return AIOConfig()
