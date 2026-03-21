@@ -30,13 +30,42 @@ class LLMProviderType(str, Enum):
     AZURE_OPENAI = "azure_openai"
 
 
+class ModelConfig(BaseModel):
+    """Per-model configuration (e.g. Azure deployment name)."""
+
+    name: str
+    deployment_name: str | None = None
+
+
 class LLMProviderConfig(BaseModel):
     type: LLMProviderType
     base_url: str | None = None
     api_key: str | None = None
     default_model: str
+    api_version: str | None = None
+    models: list[ModelConfig] = Field(default_factory=list)
     enabled: bool = True
     extra: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("models", mode="before")
+    @classmethod
+    def normalize_models(cls, v: Any) -> list[dict[str, Any]]:
+        if not isinstance(v, list):
+            return v
+        result = []
+        for item in v:
+            if isinstance(item, str):
+                result.append({"name": item})
+            else:
+                result.append(item)
+        return result
+
+    def get_model_config(self, model_name: str) -> ModelConfig | None:
+        """Look up model-specific config by name."""
+        for m in self.models:
+            if m.name == model_name:
+                return m
+        return None
 
 
 class TelegramConfig(BaseModel):

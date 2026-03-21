@@ -428,3 +428,143 @@ class TestLLMRegistry:
         assert isinstance(registry.get("openai"), OpenAIProvider)
         assert isinstance(registry.get("claude"), ClaudeProvider)
         assert isinstance(registry.get("azure"), AzureOpenAIProvider)
+
+
+# ---------------------------------------------------------------------------
+# Multi-model and deployment_map tests
+# ---------------------------------------------------------------------------
+
+
+class TestModelOverride:
+    """Test that model= parameter overrides the default model in each provider."""
+
+    async def test_ollama_model_override(self) -> None:
+        provider = OllamaProvider(model="llama3.1")
+        mock_client = AsyncMock()
+        mock_client.chat = AsyncMock(return_value={"message": {"content": "ok"}, "prompt_eval_count": 0, "eval_count": 0})
+        provider._client = mock_client
+
+        msgs = [LLMMessage(role="user", content="hi")]
+        resp = await provider.chat(msgs, model="qwen2.5")
+        call_kwargs = mock_client.chat.call_args[1]
+        assert call_kwargs["model"] == "qwen2.5"
+        assert resp.model == "qwen2.5"
+
+    async def test_openai_model_override(self) -> None:
+        provider = OpenAIProvider(api_key="k", model="gpt-4o")
+        mock_response = SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content="ok", tool_calls=None))],
+            usage=SimpleNamespace(prompt_tokens=1, completion_tokens=1),
+            model="gpt-4o-mini",
+        )
+        mock_client = AsyncMock()
+        mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
+        provider._client = mock_client
+
+        msgs = [LLMMessage(role="user", content="hi")]
+        await provider.chat(msgs, model="gpt-4o-mini")
+        call_kwargs = mock_client.chat.completions.create.call_args[1]
+        assert call_kwargs["model"] == "gpt-4o-mini"
+
+    async def test_claude_model_override(self) -> None:
+        provider = ClaudeProvider(api_key="k", model="claude-sonnet-4-20250514")
+        mock_response = SimpleNamespace(
+            content=[SimpleNamespace(type="text", text="ok")],
+            usage=SimpleNamespace(input_tokens=1, output_tokens=1),
+            model="claude-haiku-4-5-20251001",
+        )
+        mock_client = AsyncMock()
+        mock_client.messages.create = AsyncMock(return_value=mock_response)
+        provider._client = mock_client
+
+        msgs = [LLMMessage(role="user", content="hi")]
+        await provider.chat(msgs, model="claude-haiku-4-5-20251001")
+        call_kwargs = mock_client.messages.create.call_args[1]
+        assert call_kwargs["model"] == "claude-haiku-4-5-20251001"
+
+
+class TestAzureDeploymentMap:
+    """Test Azure deployment_name resolution."""
+
+    async def test_deployment_map_resolves(self) -> None:
+        provider = AzureOpenAIProvider(
+            api_key="k",
+            endpoint="https://x.openai.azure.com",
+            model="gpt-4o",
+            deployment_map={"gpt-4o": "my-gpt4o-deploy", "gpt-4o-mini": "my-mini-deploy"},
+        )
+        mock_response = SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content="ok", tool_calls=None))],
+            usage=SimpleNamespace(prompt_tokens=1, completion_tokens=1),
+            model="my-gpt4o-deploy",
+        )
+        mock_client = AsyncMock()
+        mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
+        provider._client = mock_client
+
+        msgs = [LLMMessage(role="user", content="hi")]
+        # Default model should resolve to deployment name
+        await provider.chat(msgs)
+        call_kwargs = mock_client.chat.completions.create.call_args[1]
+        assert call_kwargs["model"] == "my-gpt4o-deploy"
+
+    async def test_deployment_map_with_model_override(self) -> None:
+        provider = AzureOpenAIProvider(
+            api_key="k",
+            endpoint="https://x.openai.azure.com",
+            model="gpt-4o",
+            deployment_map={"gpt-4o": "my-gpt4o-deploy", "gpt-4o-mini": "my-mini-deploy"},
+        )
+        mock_response = SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content="ok", tool_calls=None))],
+            usage=SimpleNamespace(prompt_tokens=1, completion_tokens=1),
+            model="my-mini-deploy",
+        )
+        mock_client = AsyncMock()
+        mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
+        provider._client = mock_client
+
+        msgs = [LLMMessage(role="user", content="hi")]
+        await provider.chat(msgs, model="gpt-4o-mini")
+        call_kwargs = mock_client.chat.completions.create.call_args[1]
+        assert call_kwargs["model"] == "my-mini-deploy"
+
+    async def test_deployment_map_fallback_no_mapping(self) -> None:
+        provider = AzureOpenAIProvider(
+            api_key="k",
+            endpoint="https://x.openai.azure.com",
+            model="gpt-4o",
+            deployment_map={},
+        )
+        mock_response = SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content="ok", tool_calls=None))],
+            usage=SimpleNamespace(prompt_tokens=1, completion_tokens=1),
+            model="gpt-4o",
+        )
+        mock_client = AsyncMock()
+        mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
+        provider._client = mock_client
+
+        msgs = [LLMMessage(role="user", content="hi")]
+        await provider.chat(msgs)
+        call_kwargs = mock_client.chat.completions.create.call_args[1]
+        assert call_kwargs["model"] == "gpt-4o"  # no mapping, uses model name directly
+
+    def test_registry_builds_deployment_map(self) -> None:
+        providers = {
+            "azure": LLMProviderConfig(
+                type=LLMProviderType.AZURE_OPENAI,
+                api_key="k",
+                base_url="https://x.openai.azure.com",
+                default_model="gpt-4o",
+                api_version="2024-10-21",
+                models=[
+                    {"name": "gpt-4o", "deployment_name": "my-gpt4o"},
+                    {"name": "gpt-4o-mini", "deployment_name": "my-mini"},
+                ],
+            ),
+        }
+        registry = LLMRegistry.from_config(providers, default="azure")
+        azure_provider = registry.get("azure")
+        assert isinstance(azure_provider, AzureOpenAIProvider)
+        assert azure_provider._deployment_map == {"gpt-4o": "my-gpt4o", "gpt-4o-mini": "my-mini"}

@@ -88,16 +88,18 @@ class LLMProvider(ABC):
         messages: list[LLMMessage],
         tools: list[dict[str, Any]] | None = None,
         stream: bool = False,
+        model: str | None = None,
     ) -> LLMResponse:
-        """Send a chat completion request."""
+        """Send a chat completion request. ``model`` overrides the default."""
 
     async def chat_stream(
         self,
         messages: list[LLMMessage],
         tools: list[dict[str, Any]] | None = None,
+        model: str | None = None,
     ) -> AsyncIterator[str]:
         """Stream chat completion tokens."""
-        response = await self.chat(messages, tools, stream=False)
+        response = await self.chat(messages, tools, stream=False, model=model)
         yield response.content
 
     @abstractmethod

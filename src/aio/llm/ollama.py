@@ -46,20 +46,22 @@ class OllamaProvider(LLMProvider):
         messages: list[LLMMessage],
         tools: list[dict[str, Any]] | None = None,
         stream: bool = False,
+        model: str | None = None,
     ) -> LLMResponse:
+        effective_model = model or self._model
         client = self._get_client()
         ollama_msgs = [{"role": m.role, "content": m.content} for m in messages]
 
-        kwargs: dict[str, Any] = {"model": self._model, "messages": ollama_msgs}
+        kwargs: dict[str, Any] = {"model": effective_model, "messages": ollama_msgs}
         if tools:
             kwargs["tools"] = _to_ollama_tools(tools)
 
-        logger.info("ollama.chat", model=self._model)
+        logger.info("ollama.chat", model=effective_model)
         response = await client.chat(**kwargs)
 
         content = response.get("message", {}).get("content", "")
         tool_calls: list[ToolCall] = []
-        for tc in response.get("message", {}).get("tool_calls", []):
+        for tc in response.get("message", {}).get("tool_calls", []) or []:
             func = tc.get("function", {})
             args = func.get("arguments", {})
             if isinstance(args, str):
@@ -71,19 +73,21 @@ class OllamaProvider(LLMProvider):
             tool_calls=tool_calls,
             input_tokens=response.get("prompt_eval_count", 0),
             output_tokens=response.get("eval_count", 0),
-            model=self._model,
+            model=effective_model,
         )
 
     async def chat_stream(
         self,
         messages: list[LLMMessage],
         tools: list[dict[str, Any]] | None = None,
+        model: str | None = None,
     ) -> AsyncIterator[str]:
+        effective_model = model or self._model
         client = self._get_client()
         ollama_msgs = [{"role": m.role, "content": m.content} for m in messages]
 
-        logger.info("ollama.chat_stream", model=self._model)
-        stream = await client.chat(model=self._model, messages=ollama_msgs, stream=True)
+        logger.info("ollama.chat_stream", model=effective_model)
+        stream = await client.chat(model=effective_model, messages=ollama_msgs, stream=True)
         async for chunk in stream:
             token = chunk.get("message", {}).get("content", "")
             if token:

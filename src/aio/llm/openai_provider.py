@@ -49,15 +49,17 @@ class OpenAIProvider(LLMProvider):
         messages: list[LLMMessage],
         tools: list[dict[str, Any]] | None = None,
         stream: bool = False,
+        model: str | None = None,
     ) -> LLMResponse:
+        effective_model = model or self._model
         client = self._get_client()
         oai_msgs = [m.to_openai_dict() for m in messages]
 
-        kwargs: dict[str, Any] = {"model": self._model, "messages": oai_msgs}
+        kwargs: dict[str, Any] = {"model": effective_model, "messages": oai_msgs}
         if tools:
             kwargs["tools"] = _to_openai_tools(tools)
 
-        logger.info("openai.chat", model=self._model, stream=stream)
+        logger.info("openai.chat", model=effective_model, stream=stream)
 
         if stream:
             return await self._chat_stream_collect(kwargs)
@@ -125,15 +127,17 @@ class OpenAIProvider(LLMProvider):
         self,
         messages: list[LLMMessage],
         tools: list[dict[str, Any]] | None = None,
+        model: str | None = None,
     ) -> AsyncIterator[str]:
+        effective_model = model or self._model
         client = self._get_client()
         oai_msgs = [m.to_openai_dict() for m in messages]
 
-        kwargs: dict[str, Any] = {"model": self._model, "messages": oai_msgs, "stream": True}
+        kwargs: dict[str, Any] = {"model": effective_model, "messages": oai_msgs, "stream": True}
         if tools:
             kwargs["tools"] = _to_openai_tools(tools)
 
-        logger.info("openai.chat_stream", model=self._model)
+        logger.info("openai.chat_stream", model=effective_model)
         stream = await client.chat.completions.create(**kwargs)
         async for chunk in stream:
             delta = chunk.choices[0].delta if chunk.choices else None

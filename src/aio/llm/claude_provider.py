@@ -58,13 +58,15 @@ class ClaudeProvider(LLMProvider):
         messages: list[LLMMessage],
         tools: list[dict[str, Any]] | None = None,
         stream: bool = False,
+        model: str | None = None,
     ) -> LLMResponse:
+        effective_model = model or self._model
         client = self._get_client()
         system, rest = _extract_system(messages)
         api_msgs = [m.to_anthropic_dict() for m in rest]
 
         kwargs: dict[str, Any] = {
-            "model": self._model,
+            "model": effective_model,
             "max_tokens": self._max_tokens,
             "messages": api_msgs,
         }
@@ -73,7 +75,7 @@ class ClaudeProvider(LLMProvider):
         if tools:
             kwargs["tools"] = _to_anthropic_tools(tools)
 
-        logger.info("claude.chat", model=self._model, stream=stream)
+        logger.info("claude.chat", model=effective_model, stream=stream)
 
         if stream:
             return await self._chat_stream_collect(kwargs)
@@ -144,13 +146,15 @@ class ClaudeProvider(LLMProvider):
         self,
         messages: list[LLMMessage],
         tools: list[dict[str, Any]] | None = None,
+        model: str | None = None,
     ) -> AsyncIterator[str]:
+        effective_model = model or self._model
         client = self._get_client()
         system, rest = _extract_system(messages)
         api_msgs = [m.to_anthropic_dict() for m in rest]
 
         kwargs: dict[str, Any] = {
-            "model": self._model,
+            "model": effective_model,
             "max_tokens": self._max_tokens,
             "messages": api_msgs,
         }
@@ -159,7 +163,7 @@ class ClaudeProvider(LLMProvider):
         if tools:
             kwargs["tools"] = _to_anthropic_tools(tools)
 
-        logger.info("claude.chat_stream", model=self._model)
+        logger.info("claude.chat_stream", model=effective_model)
         async with client.messages.stream(**kwargs) as stream:
             async for text in stream.text_stream:
                 yield text

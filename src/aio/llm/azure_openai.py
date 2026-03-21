@@ -22,11 +22,13 @@ class AzureOpenAIProvider(LLMProvider):
         endpoint: str,
         model: str = "gpt-4o",
         api_version: str = "2024-10-21",
+        deployment_map: dict[str, str] | None = None,
     ) -> None:
         self._api_key = api_key
         self._endpoint = endpoint
         self._model = model
         self._api_version = api_version
+        self._deployment_map: dict[str, str] = deployment_map or {}
         self._client: Any = None
 
     def _get_client(self) -> Any:
@@ -40,20 +42,27 @@ class AzureOpenAIProvider(LLMProvider):
             )
         return self._client
 
+    def _resolve_deployment(self, model: str | None) -> str:
+        """Resolve model name to Azure deployment name."""
+        effective_model = model or self._model
+        return self._deployment_map.get(effective_model, effective_model)
+
     async def chat(
         self,
         messages: list[LLMMessage],
         tools: list[dict[str, Any]] | None = None,
         stream: bool = False,
+        model: str | None = None,
     ) -> LLMResponse:
+        deployment = self._resolve_deployment(model)
         client = self._get_client()
         oai_msgs = [m.to_openai_dict() for m in messages]
 
-        kwargs: dict[str, Any] = {"model": self._model, "messages": oai_msgs}
+        kwargs: dict[str, Any] = {"model": deployment, "messages": oai_msgs}
         if tools:
             kwargs["tools"] = _to_openai_tools(tools)
 
-        logger.info("azure_openai.chat", model=self._model, stream=stream)
+        logger.info("azure_openai.chat", model=deployment, stream=stream)
 
         if stream:
             return await self._chat_stream_collect(kwargs)
@@ -121,15 +130,17 @@ class AzureOpenAIProvider(LLMProvider):
         self,
         messages: list[LLMMessage],
         tools: list[dict[str, Any]] | None = None,
+        model: str | None = None,
     ) -> AsyncIterator[str]:
+        deployment = self._resolve_deployment(model)
         client = self._get_client()
         oai_msgs = [m.to_openai_dict() for m in messages]
 
-        kwargs: dict[str, Any] = {"model": self._model, "messages": oai_msgs, "stream": True}
+        kwargs: dict[str, Any] = {"model": deployment, "messages": oai_msgs, "stream": True}
         if tools:
             kwargs["tools"] = _to_openai_tools(tools)
 
-        logger.info("azure_openai.chat_stream", model=self._model)
+        logger.info("azure_openai.chat_stream", model=deployment)
         stream = await client.chat.completions.create(**kwargs)
         async for chunk in stream:
             delta = chunk.choices[0].delta if chunk.choices else None
