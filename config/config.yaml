@@ -1,0 +1,91 @@
+# AIO Configuration — config.yaml
+# See docs/ for full configuration reference.
+
+database:
+  url: "postgresql+asyncpg://aio:aio@aio-postgres:5432/aio"
+
+# Default LLM provider to use
+default_llm_provider: "ollama"
+
+llm_providers:
+  ollama:
+    type: "ollama"
+    base_url: "http://localhost:11434"
+    default_model: "llama3.1"
+  openai:
+    type: "openai"
+    api_key: "${OPENAI_API_KEY}"
+    default_model: "gpt-4o"
+    enabled: false
+  claude:
+    type: "claude"
+    api_key: "${ANTHROPIC_API_KEY}"
+    default_model: "claude-sonnet-4-20250514"
+    enabled: false
+  azure_openai:
+    type: "azure_openai"
+    base_url: "${AZURE_OPENAI_ENDPOINT}"
+    api_key: "${AZURE_OPENAI_API_KEY}"
+    default_model: "gpt-4o"
+    enabled: false
+    extra:
+      api_version: "2024-10-21"
+
+# Telegram Bot
+telegram:
+  enabled: true
+  bot_token: "${TELEGRAM_BOT_TOKEN}"
+  allowed_user_ids: "${TELEGRAM_ALLOWED_IDS}"  # Comma-separated IDs, empty = allow all
+
+# CLI
+cli:
+  enabled: true
+
+# MCP Servers
+mcp_servers:
+  - name: "filesystem"
+    command: "aio-mcp-filesystem"
+    enabled: true
+  - name: "terminal"
+    command: "aio-mcp-terminal"
+    enabled: true
+  - name: "websearch"
+    command: "aio-mcp-websearch"
+    enabled: true
+  - name: "browser"
+    command: "aio-mcp-browser"
+    enabled: true
+
+# Security
+security:
+  allowed_directories:
+    - "~"
+    - "/tmp/aio"
+  blocked_commands:
+    - "rm -rf /"
+    - "mkfs"
+    - "dd if="
+    - ":(){ :|:& };:"
+  autonomy_level: "semi-auto"
+
+# Agent Templates
+agent_templates:
+  - name: "general"
+    description: "General assistant for daily conversations and information queries"
+    mcp_servers: ["websearch"]
+    skills: ["basic_chat"]
+
+  - name: "developer"
+    description: "Development assistant for coding, debugging, and code review"
+    mcp_servers: ["filesystem", "terminal"]
+    skills: ["code_writing", "debug_flow"]
+
+  - name: "knowledge"
+    description: "Knowledge assistant for RAG-based Q&A over local documents"
+    mcp_servers: ["filesystem"]
+    skills: ["doc_reading", "summarization"]
+
+# Execution environment
+default_execution_env: "host"
+default_autonomy_level: "semi-auto"
+max_concurrent_sessions: 3
