@@ -39,6 +39,11 @@ class MessageBus:
     def __init__(self) -> None:
         self._handlers: dict[str, Any] = {}
         self._queue: asyncio.Queue[Message] = asyncio.Queue()
+        self._orchestrator: Any | None = None
+
+    def set_orchestrator(self, orchestrator: Any) -> None:
+        """Attach the AgentOrchestrator that processes dispatched messages."""
+        self._orchestrator = orchestrator
 
     def register_handler(self, channel_type: str, handler: Any) -> None:
         self._handlers[channel_type] = handler
@@ -46,7 +51,11 @@ class MessageBus:
     async def dispatch(self, message: Message) -> Message:
         """Dispatch an incoming user message to the orchestrator and return the response."""
         logger.info("message_bus.dispatch", session_id=message.session_id, role=message.role)
-        # TODO: wire to AgentOrchestrator
+
+        if self._orchestrator is not None:
+            return await self._orchestrator.run(message)
+
+        # Fallback echo if orchestrator is not wired
         return Message(
             role=MessageRole.ASSISTANT,
             content=(
